@@ -9,7 +9,7 @@ const sendVerificationEmail = async (to, token) => {
     html: `
       <h2>Welcome to EduSpline</h2>
       <p>Click the link below to verify your account. This link expires in 24 hours.</p>
-      <a href="${link}" style="padding:20px 30px;background:#4F46E5;color:white;border-radius:5px;text-decoration:none;">
+      <a href="${link}" style="padding:10px 20px;background:#4F46E5;color:white;border-radius:5px;text-decoration:none;">
         Verify Account
       </a>
     `
@@ -26,7 +26,7 @@ const sendInviteEmail = async (to, token, inviterName) => {
       <h2>You've been invited</h2>
       <p>${inviterName} has invited you to join their institution on EduSpline.</p>
       <p>Click below to accept. This invite expires in 48 hours.</p>
-      <a href="${link}" style="padding:20px 30px;background:#4F46E5;color:white;border-radius:5px;text-decoration:none;">
+      <a href="${link}" style="padding:10px 20px;background:#4F46E5;color:white;border-radius:5px;text-decoration:none;">
         Accept Invite
       </a>
     `

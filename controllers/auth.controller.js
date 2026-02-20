@@ -32,7 +32,6 @@ const signup = async (req, res) => {
   }
 };
 
-
 // GET /api/auth/verify-email?token=...
 const verifyEmail = async (req, res) => {
   try {
@@ -80,7 +79,7 @@ const login = async (req, res) => {
   }
 };
 
-// POST /api/auth/institution  (Step 1 of registration)
+// POST /api/auth/institution (Step 1 of registration)
 const setupInstitution = async (req, res) => {
   try {
     const { name, type, estimatedLearners, country } = req.body;
@@ -99,11 +98,43 @@ const setupInstitution = async (req, res) => {
   }
 };
 
+// POST /api/auth/set-password
+const setPassword = async (req, res) => {
+  try {
+    const { email, password, confirmPassword } = req.body;
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const hashed = await bcrypt.hash(password, 12);
+    user.password = hashed;
+    await user.save();
+
+    res.json({ message: 'Password set successfully. You can now log in.' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 // Google OAuth callback handler
 const googleCallback = (req, res) => {
   const accessToken = generateAccessToken(req.user._id);
-  // Redirect to frontend with token — frontend stores it
   res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${accessToken}`);
 };
 
-module.exports = { signup, verifyEmail, login, setupInstitution, googleCallback };
+module.exports = { 
+  signup, 
+  verifyEmail, 
+  login, 
+  setupInstitution, 
+  googleCallback, 
+  setPassword 
+};
