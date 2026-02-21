@@ -24,7 +24,7 @@ const signup = async (req, res) => {
     await sendVerificationEmail(email, verificationToken);
 
     // TEMPORARY - remove before production
-    console.log('VERIFICATION TOKEN:', verificationToken);
+    // console.log('VERIFICATION TOKEN:', verificationToken);
 
     res.status(201).json({ message: 'Account created. Check your email to verify your account.' });
   } catch (err) {
