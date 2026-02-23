@@ -16,6 +16,13 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(passport.initialize());
 
+
+
+// Health check — keeps server alive on Render free tier
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is running' });
+});
+
 // Rate limiting on auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
