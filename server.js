@@ -1,3 +1,5 @@
+process.env.UV_THREADPOOL_SIZE = 128;
+require('dns').setDefaultResultOrder('ipv4first');
 require('dotenv').config();
 const app = require('./app');
 const connectDB = require('./config/db');
