@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth.routes');
 const teamRoutes = require('./routes/team.routes');
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
