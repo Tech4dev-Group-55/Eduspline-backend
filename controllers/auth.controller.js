@@ -21,17 +21,18 @@ const signup = async (req, res) => {
     user.verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(email, verificationToken);
-
-    // TEMPORARY - remove before production
-    // console.log('VERIFICATION TOKEN:', verificationToken);
-
+    // send response immediately — don't wait for email
     res.status(201).json({ message: 'Account created. Check your email to verify your account.' });
+
+    // send email after response — failure won't affect the user
+    sendVerificationEmail(email, verificationToken).catch(err => {
+      console.error('Email send failed:', err.message);
+    });
+
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
-
 // GET /api/auth/verify-email?token=...
 const verifyEmail = async (req, res) => {
   try {
