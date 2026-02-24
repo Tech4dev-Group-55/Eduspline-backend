@@ -21,13 +21,19 @@ const signup = async (req, res) => {
     user.verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
 
-    // send response immediately — don't wait for email
-    res.status(201).json({ message: 'Account created. Check your email to verify your account.' });
-
-    // send email after response — failure won't affect the user
-    sendVerificationEmail(email, verificationToken).catch(err => {
-      console.error('Email send failed:', err.message);
-    });
+    // try sending email first
+    try {
+      await sendVerificationEmail(email, verificationToken);
+      res.status(201).json({ message: 'Account created. Check your email to verify your account.' });
+    } catch (emailErr) {
+      console.error('Email send failed:', emailErr.message);
+      // delete the user since email failed
+      await user.deleteOne();
+      res.status(500).json({ 
+        message: 'Account could not be created. Email delivery failed. Please try again.',
+        error: emailErr.message 
+      });
+    }
 
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
