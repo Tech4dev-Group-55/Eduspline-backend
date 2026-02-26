@@ -1,12 +1,13 @@
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const { parse } = require('csv-parse/sync');
 const User = require('../models/User');
-const { generateInviteToken } = require('../utils/generateToken');
+const { generateInviteToken, generateAccessToken } = require('../utils/generateToken');
 const { sendInviteEmail, sendBulkInviteEmails } = require('../utils/sendEmail');
 
 const VALID_ROLES = ['super_admin', 'admin', 'instructor', 'student'];
 
-// POST /api/team/invite  — manual invite (unchanged)
+// POST /api/team/invite — manual invite
 const inviteTeamMember = async (req, res) => {
   try {
     const { name, email, role } = req.body;
@@ -39,7 +40,7 @@ const inviteTeamMember = async (req, res) => {
   }
 };
 
-// POST /api/team/invite/csv  — csv bulk invite
+// POST /api/team/invite/csv — csv bulk invite
 const csvInviteTeamMembers = async (req, res) => {
   try {
     const institutionId = req.user.institution;
@@ -52,11 +53,10 @@ const csvInviteTeamMembers = async (req, res) => {
       return res.status(400).json({ message: 'No CSV file uploaded' });
     }
 
-    // parse csv from memory buffer
     let rows;
     try {
       rows = parse(req.file.buffer, {
-        columns: true,         // use first row as headers
+        columns: true,
         skip_empty_lines: true,
         trim: true
       });
@@ -76,23 +76,19 @@ const csvInviteTeamMembers = async (req, res) => {
       const email = (row.email || row.Email || '').toLowerCase().trim();
       const role = (row.role || row.Role || 'student').toLowerCase().trim();
 
-      // validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!email || !emailRegex.test(email)) {
         skipped.push({ row: name || email || 'unknown', reason: 'Invalid or missing email' });
         continue;
       }
 
-      // validate name
       if (!name) {
         skipped.push({ email, reason: 'Missing name' });
         continue;
       }
 
-      // validate role — default to student if empty or invalid
       const resolvedRole = VALID_ROLES.includes(role) ? role : 'student';
 
-      // check for duplicate in database
       const existing = await User.findOne({ email });
       if (existing) {
         skipped.push({ email, reason: 'Email already exists in the system' });
@@ -103,13 +99,9 @@ const csvInviteTeamMembers = async (req, res) => {
     }
 
     if (toInvite.length === 0) {
-      return res.status(400).json({
-        message: 'No valid rows found in CSV',
-        skipped
-      });
+      return res.status(400).json({ message: 'No valid rows found in CSV', skipped });
     }
 
-    // create users and generate tokens
     const recipients = [];
     for (const member of toInvite) {
       const inviteToken = generateInviteToken(member.email, institutionId, member.role);
@@ -127,17 +119,12 @@ const csvInviteTeamMembers = async (req, res) => {
       recipients.push({ email: member.email, token: inviteToken });
     }
 
-    // send emails with delay between each
     const emailResults = await sendBulkInviteEmails(
       recipients,
       req.user.name || req.user.email
     );
 
-    // merge email failures into skipped list
-    const allSkipped = [
-      ...skipped,
-      ...emailResults.failed
-    ];
+    const allSkipped = [...skipped, ...emailResults.failed];
 
     res.status(201).json({
       message: 'CSV processed successfully',
@@ -150,13 +137,25 @@ const csvInviteTeamMembers = async (req, res) => {
   }
 };
 
-// POST /api/team/accept-invite (unchanged)
+// POST /api/team/accept-invite
 const acceptInvite = async (req, res) => {
   try {
-    const { token } = req.body;
-    const decoded = jwt.verify(token, process.env.JWT_INVITE_SECRET);
+    const { token, password, confirmPassword } = req.body;
 
+    // validate password
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required to activate your account' });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_INVITE_SECRET);
     const user = await User.findOne({ email: decoded.email });
+
     if (!user) return res.status(404).json({ message: 'Invite not found' });
     if (user.inviteTokenExpiry < Date.now()) {
       return res.status(400).json({ message: 'Invite expired. Ask admin to resend.' });
@@ -166,22 +165,23 @@ const acceptInvite = async (req, res) => {
     user.isInvited = false;
     user.inviteToken = undefined;
     user.inviteTokenExpiry = undefined;
+    user.password = await bcrypt.hash(password, 12);
     await user.save();
 
-    const { generateAccessToken } = require('../utils/generateToken');
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.role, user.email);
 
     res.json({
-      message: 'Invite accepted',
+      message: 'Account activated successfully',
       accessToken,
       user: { id: user._id, email: user.email, role: user.role }
     });
+
   } catch (err) {
     res.status(400).json({ message: 'Invalid or expired invite token' });
   }
 };
 
-// GET /api/team (unchanged)
+// GET /api/team
 const getTeamMembers = async (req, res) => {
   try {
     const members = await User.find({ institution: req.user.institution })

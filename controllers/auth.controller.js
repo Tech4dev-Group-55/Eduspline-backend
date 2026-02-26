@@ -21,17 +21,15 @@ const signup = async (req, res) => {
     user.verificationTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await user.save();
 
-    // try sending email first
     try {
       await sendVerificationEmail(email, verificationToken);
       res.status(201).json({ message: 'Account created. Check your email to verify your account.' });
     } catch (emailErr) {
       console.error('Email send failed:', emailErr.message);
-      // delete the user since email failed
       await user.deleteOne();
-      res.status(500).json({ 
+      res.status(500).json({
         message: 'Account could not be created. Email delivery failed. Please try again.',
-        error: emailErr.message 
+        error: emailErr.message
       });
     }
 
@@ -39,6 +37,7 @@ const signup = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
+
 // GET /api/auth/verify-email?token=...
 const verifyEmail = async (req, res) => {
   try {
@@ -79,14 +78,14 @@ const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.role, user.email);
     res.json({ accessToken, user: { id: user._id, email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
-// POST /api/auth/institution (Step 1 of registration)
+// POST /api/auth/institution
 const setupInstitution = async (req, res) => {
   try {
     const { name, type, estimatedLearners, country } = req.body;
@@ -131,17 +130,126 @@ const setPassword = async (req, res) => {
   }
 };
 
+// PUT /api/auth/settings
+const updateSettings = async (req, res) => {
+  try {
+    const { name, type, estimatedLearners, country } = req.body;
+    const institutionId = req.user.institution;
+
+    if (!institutionId) {
+      return res.status(400).json({ message: 'No institution found' });
+    }
+
+    const institution = await Institution.findByIdAndUpdate(
+      institutionId,
+      { name, type, estimatedLearners, country },
+      { new: true, runValidators: true }
+    );
+
+    if (!institution) {
+      return res.status(404).json({ message: 'Institution not found' });
+    }
+
+    if (req.body.email && req.body.email !== req.user.email) {
+      const emailExists = await User.findOne({ email: req.body.email });
+      if (emailExists) {
+        return res.status(409).json({ message: 'Email already in use' });
+      }
+      req.user.email = req.body.email;
+      await req.user.save();
+    }
+
+    res.json({ message: 'Settings updated successfully', institution });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// PUT /api/auth/change-password
+const changePassword = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmNewPassword } = req.body;
+
+    if (newPassword !== confirmNewPassword) {
+      return res.status(400).json({ message: 'New passwords do not match' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user.password) {
+      return res.status(400).json({ message: 'No password set. Use set-password endpoint.' });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Old password is incorrect' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 12);
+    await user.save();
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// GET /api/auth/me
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('-password -verificationToken -verificationTokenExpiry -inviteToken -inviteTokenExpiry')
+      .populate('institution', 'name type estimatedLearners country');
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+// GET /api/auth/settings
+const getSettings = async (req, res) => {
+  try {
+    const institutionId = req.user.institution;
+
+    if (!institutionId) {
+      return res.status(400).json({ message: 'No institution found' });
+    }
+
+    const institution = await Institution.findById(institutionId);
+    if (!institution) {
+      return res.status(404).json({ message: 'Institution not found' });
+    }
+
+    res.json({
+      email: req.user.email,
+      institution
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 // Google OAuth callback handler
 const googleCallback = (req, res) => {
-  const accessToken = generateAccessToken(req.user._id);
+  const accessToken = generateAccessToken(req.user._id, req.user.role, req.user.email);
   res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${accessToken}`);
 };
 
-module.exports = { 
-  signup, 
-  verifyEmail, 
-  login, 
-  setupInstitution, 
-  googleCallback, 
-  setPassword 
+module.exports = {
+  signup,
+  verifyEmail,
+  login,
+  setupInstitution,
+  googleCallback,
+  setPassword,
+  updateSettings,
+  changePassword,
+  getMe,
+  getSettings
 };
