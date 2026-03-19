@@ -4,7 +4,7 @@ const FormData = require('form-data');
 const User = require('../models/User');
 const Prediction = require('../models/Prediction');
 
-const ML_API_URL = 'https://eduspline-ai-prediction-model-1.onrender.com';
+const ML_API_URL = 'https://eduspline-ai-prediction-model-1-vvej.onrender.com';
 
 const REQUIRED_COLUMNS = [
   'StudyHours', 'Attendance', 'Resources', 'Extracurricular',
