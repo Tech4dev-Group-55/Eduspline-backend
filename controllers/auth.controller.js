@@ -238,7 +238,8 @@ const getSettings = async (req, res) => {
 // Google OAuth callback handler
 const googleCallback = (req, res) => {
   const accessToken = generateAccessToken(req.user._id, req.user.role, req.user.email);
-  res.redirect(`${process.env.CLIENT_URL}/auth/callback?token=${accessToken}`);
+  const base = (process.env.CLIENT_URL || '').replace(/\/$/, '');
+  res.redirect(`${base}/auth/callback?token=${accessToken}`);
 };
 
 module.exports = {
