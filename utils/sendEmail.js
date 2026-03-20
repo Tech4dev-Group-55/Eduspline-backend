@@ -6,8 +6,10 @@ apiKey.apiKey = process.env.BREVO_API_KEY;
 
 const transactionalApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
+const clientUrl = (process.env.CLIENT_URL || '').replace(/\/$/, '');
+
 const sendVerificationEmail = async (to, token) => {
-  const link = `${process.env.CLIENT_URL}/verify-email?token=${token}`;
+  const link = `${clientUrl}/verify-email?token=${token}`;
 
   const email = new SibApiV3Sdk.SendSmtpEmail();
   email.to = [{ email: to }];
@@ -25,7 +27,7 @@ const sendVerificationEmail = async (to, token) => {
 };
 
 const sendInviteEmail = async (to, token, inviterName) => {
-  const link = `${process.env.CLIENT_URL}/accept-invite?token=${token}`;
+  const link = `${clientUrl}/accept-invite?token=${token}`;
 
   const email = new SibApiV3Sdk.SendSmtpEmail();
   email.to = [{ email: to }];
