@@ -224,9 +224,87 @@ const getStudentPrediction = async (req, res) => {
   }
 };
 
+// POST /api/predictions/predict
+const predictSingleStudent = async (req, res) => {
+  try {
+    const institutionId = req.user.institution;
+    if (!institutionId) {
+      return res.status(400).json({ message: 'Complete institution setup first' });
+    }
+
+    const {
+      studentName, studentEmail, study_hours, attendance, resources,
+      extracurricular, motivation, internet, gender, age, online_courses,
+      discussions, assignment_completion, edtech_usage_level,
+      stress_level, learning_style
+    } = req.body;
+
+    if (!studentEmail || !studentName) {
+      return res.status(400).json({ message: 'studentName and studentEmail are required' });
+    }
+
+    // call ML model single predict endpoint
+    let mlResponse;
+    try {
+      mlResponse = await axios.post(`${ML_API_URL}/predict`, {
+        study_hours, attendance, resources, extracurricular,
+        motivation, internet, gender, age, online_courses,
+        discussions, assignment_completion, edtech_usage_level,
+        stress_level, learning_style
+      }, { timeout: 60000 });
+    } catch (err) {
+      return res.status(502).json({
+        message: 'ML model API is unavailable. Please try again shortly.',
+        error: err.message
+      });
+    }
+
+    const { risk_level, risk_code, confidence, recommendations } = mlResponse.data;
+
+    // try to find matching user account
+    const existingUser = await User.findOne({
+      email: studentEmail.toLowerCase().trim(),
+      institution: institutionId
+    });
+
+    // upsert — overwrite if exists
+    await Prediction.findOneAndUpdate(
+      { studentEmail: studentEmail.toLowerCase().trim(), institutionId },
+      {
+        studentId: existingUser ? existingUser._id : null,
+        institutionId,
+        studentName,
+        studentEmail: studentEmail.toLowerCase().trim(),
+        riskLevel: risk_level,
+        riskCode: risk_code,
+        confidence,
+        studyHours: study_hours || 0,
+        attendance: attendance || 0,
+        assignmentCompletion: assignment_completion || 0,
+        recommendations: recommendations || []
+      },
+      { upsert: true, new: true }
+    );
+
+    res.status(201).json({
+      message: 'Prediction successful',
+      student: studentName,
+      email: studentEmail,
+      riskLevel: risk_level,
+      riskCode: risk_code,
+      confidence,
+      recommendations
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
 module.exports = {
   uploadPredictions,
   getDashboardMetrics,
   getInsights,
-  getStudentPrediction
+  getStudentPrediction,
+   predictSingleStudent
 };
